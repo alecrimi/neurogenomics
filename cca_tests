@@ -1,0 +1,478 @@
+##############################################
+#  R Code for canonical correlation analysis #
+##############################################
+
+# Assume we load the features from the neuroimaging and genetics dataset from the  TGCA archive
+
+attach(data)
+
+
+### Doing the CCA the long way:
+
+# Finding blocks of the correlation matrix:
+
+R11 <- cor(imaging.meas)
+R22 <- cor(genetics.meas)
+R12 <- c(cor(imaging.meas[,1], genetics.meas[,1]), cor(imaging.meas[,1], genetics.meas[,2]),
+         cor(imaging.meas[,2], genetics.meas[,1]), cor(imaging.meas[,2], genetics.meas[,2]))
+R12 <- matrix(R12, ncol=ncol(R22), byrow=T) # R12 has q2 columns, same as number of genetics measurements
+R21 <- t(R12)  # R21=transpose of R12
+
+# Finding the E1 and E2 matrices:
+
+E1 <- solve(R11) %*% R12 %*% solve(R22) %*% R21
+E2 <- solve(R22) %*% R21 %*% solve(R11) %*% R12
+
+# print(E1)
+# print(E2)
+
+eigen(E1)
+eigen(E2)
+
+# The canonical correlations are:
+
+canon.corr <- sqrt(eigen(E1)$values)
+canon.corr
+
+# The canonical variates are based on the eigenvectors of E1 and E2:
+
+# a1 = (0.922, -0.388)
+# b1 = (0.943, -0.333)
+# a2 = (0.457, 0.890)
+# b2 = (-0.679, 0.734)
+
+# Only the first canonical correlation is really substantial:
+
+# u1 = 0.92*imaging.Length - 0.39*imaging.Width
+# v1 = 0.94*genetics.Length - 0.33*genetics.Width
+
+# Plotting the first set of canonical variables:
+
+u1 <- as.matrix(data.std[,1:2]) %*% as.matrix(eigen(E1)$vectors[,1])
+v1 <- as.matrix(data.std[,3:4]) %*% as.matrix(eigen(E2)$vectors[,1])
+plot(u1,v1)
+cor(u1,v1)
+
+# Plotting the second set of canonical variables:
+
+u2 <- as.matrix(data.std[,1:2]) %*% as.matrix(eigen(E1)$vectors[,2])
+v2 <- as.matrix(data.std[,3:4]) %*% as.matrix(eigen(E2)$vectors[,2])
+plot(u2,v2)
+cor(u2,v2)
+
+### Doing CCA using the built-in cancor function:
+
+cancor(imaging.meas, genetics.meas)
+
+# The canonical correlations are the same as the ones we found,
+# The canonical variates are a little different because the cancor 
+# function works with the centered data rather than the original data.
+
+
+
+############## TEST WITH THE IRIS DATASET ##################
+
+### Doing CCA using Dr. Habing's cancor2 function:
+
+### First copy this function into R: #############
+##
+cancor2<-function(x,y,dec=4){
+#Canonical Correlation Analysis to mimic SAS PROC CANCOR output.
+#Basic formulas can be found in Chapter 10 of Mardia, Kent, and Bibby (1979).
+# The approximate F statistic is exercise 3.7.6b.
+    x<-as.matrix(x);y<-as.matrix(y)
+    n<-dim(x)[1];q1<-dim(x)[2];q2<-dim(y)[2];q<-min(q1,q2)
+    S11<-cov(x);S12<-cov(x,y);S21<-t(S12);S22<-cov(y)
+    E1<-eigen(solve(S11)%*%S12%*%solve(S22)%*%S21);E2<-eigen(solve(S22)%*%S21%*%solve(S11)%*%S12)
+    rsquared<-as.real(E1$values[1:q])
+    LR<-NULL;pp<-NULL;qq<-NULL;tt<-NULL
+    for (i in 1:q){
+        LR<-c(LR,prod(1-rsquared[i:q]))
+        pp<-c(pp,q1-i+1)
+        qq<-c(qq,q2-i+1)
+        tt<-c(tt,n-1-i+1)}
+    m<-tt-0.5*(pp+qq+1);lambda<-(1/4)*(pp*qq-2);s<-sqrt((pp^2*qq^2-4)/(pp^2+qq^2-5))
+    F<-((m*s-2*lambda)/(pp*qq))*((1-LR^(1/s))/LR^(1/s));df1<-pp*qq;df2<-(m*s-2*lambda);pval<-1-pf(F,df1,df2)
+    outmat<-round(cbind(sqrt(rsquared),rsquared,LR,F,df1,df2,pval),dec)
+    colnames(outmat)=list("R","RSquared","LR","ApproxF","NumDF","DenDF","pvalue")
+    rownames(outmat)=as.character(1:q);xrels<-round(cor(x,x%*%E1$vectors)[,1:q],dec)
+    colnames(xrels)<-apply(cbind(rep("U",q),as.character(1:q)),1,paste,collapse="")
+    yrels<-round(cor(y,y%*%E2$vectors)[,1:q],dec)
+    colnames(yrels)<-apply(cbind(rep("V",q),as.character(1:q)),1,paste,collapse="")
+    list(Summary=outmat,a.Coefficients=E1$vectors,b.Coefficients=E2$vectors,
+         XUCorrelations=xrels,YVCorrelations=yrels)
+   } 
+## END FUNCTION
+#################################################
+
+# Then use it as on the iris example:
+
+cancor2(sepal.meas, petal.meas)
+
+# It produces two other pieces of information:  An F-test for the significance of
+# each canonical correlation, and the correlations between the original variables
+# and the corresponding canonical variates.
+
+
+##############################################################
+##############################################################
+
+# Doing canonical correlation given a sample correlation matrix
+# rather than the raw data matrix:
+
+# The Los Angeles Depression Study (n=294 individuals):
+
+# q1 = 2 "health variables":
+# CESD:  A numerical measure of depression
+# Health: A measure of general perceived health status
+
+# q2 = 4 "personal (~demographic) variables":
+# Gender:  Low=Male, High=Female
+# Age
+# Income
+# Education Level
+
+# Suppose the sample correlation matrix R is as given in Table 8.4, page 165:
+
+R22 <- matrix( c(
+1,.044,-.106,-.18,
+.044,1,-.208,-.192,
+-.106,-.208,1,.492,
+-.18,-.192,.492,1 ),
+ncol=4,byrow=T)
+
+R11 <- matrix( c(
+1,.212,.212,1),
+ncol=2,byrow=T)
+
+R12 <- matrix( c(
+.124,-.164,-.101,-.158,
+.098,.308,-.27,-.183),
+ncol=4, byrow=T)
+
+R21 <- t(R12)
+
+# Finding the E1 and E2 matrices:
+
+E1 <- solve(R11) %*% R12 %*% solve(R22) %*% R21
+E2 <- solve(R22) %*% R21 %*% solve(R11) %*% R12
+
+# print(E1)
+# print(E2)
+
+eigen(E1)
+eigen(E2)
+
+# The canonical correlations are:
+
+canon.corr <- sqrt(eigen(E1)$values)
+canon.corr
+
+# First canonical variate:
+
+# u1 = 0.46*CESD - 0.89*Health
+# v1 = 0.02*Gender + 0.90*Age - 0.41*Education + 0.13*Income
+
+# Second canonical variate:
+
+# u2 = - 0.95*CESD - 0.32*Health
+# v2 = - 0.45*Gender + 0.46*Age + 0.47*Education + 0.60*Income
+
+## Bartlett's test for the significance of the first canonical correlation:
+## The null hypothesis is that the first (and smaller) canonical correlations are zero.
+
+my.n <- 294; my.q1 <- 2; my.q2 <- 4
+test.stat <- -( (my.n-1) - 0.5*(my.q1+my.q2+1) ) * sum(log(1-eigen(E1)$values))
+test.stat
+P.value <- pchisq(test.stat, df = my.q1*my.q2, lower.tail=F)
+P.value
+
+# Since the P-value is tiny, we conclude that there is at least one 
+# nonzero canonical correlation.
+
+
+## Bartlett's test for the significance of the second canonical correlation:
+## The null hypothesis is that the second (and smaller) canonical correlations are zero in general, 
+## but there's only two here.
+
+my.n <- 294; my.q1 <- 2; my.q2 <- 4
+test.stat <- -( (my.n-1) - 0.5*(my.q1+my.q2+1) ) * sum(log(1-eigen(E1)$values[-1]))
+test.stat
+P.value <- pchisq(test.stat, df = (my.q1-1)*(my.q2-1), lower.tail=F)
+P.value
+
+# The P-value is again very small, so we conclude there are at least two 
+# nonzero canonical correlations.  In this case, that means exactly two
+# nonzero canonical correlations!
+
+#####################################################################################
+#####################################################################################
+
+
+########################################
+#  R Code for multivariate regression  #
+########################################
+
+# Example 1:  The Computer Data
+
+comput <- read.table("http://www.stat.sc.edu/~hitchcock/computerdata.txt", header=T)
+
+attach(comput)
+
+# y1 = CPU time (in hours)
+# y2 = disk input/output capacity
+# x1 = customer orders (in thousands)
+# x2 = add-delete items (in thousands)
+
+# Fitting the multivariate linear regression model:
+
+comp.mod.y1 <- lm(y1 ~ x1 + x2)
+comp.mod.y2 <- lm(y2 ~ x1 + x2)
+
+Beta.hat <- cbind(coef(comp.mod.y1), coef(comp.mod.y2) )
+Beta.hat
+
+# A quicker way to get a summary:
+
+comp.mod <- lm(cbind(y1,y2) ~ x1 + x2)
+summary(comp.mod)
+
+# Getting the matrix of fitted values:
+
+X.mat <- cbind(rep(1,times=nrow(comput)),x1,x2) 
+
+Y.hat <- X.mat %*% Beta.hat
+Y.hat
+
+# Getting the matrix of residuals:
+
+resid.mat <- cbind (y1,y2) - Y.hat
+resid.mat
+
+
+# Note we could get these matrices from the individual regression models as well:
+ 
+cbind(fitted(comp.mod.y1), fitted(comp.mod.y2))
+
+cbind(resid(comp.mod.y1), resid(comp.mod.y2))
+
+
+#### Testing about x2 in the model:
+
+## Full model:
+
+my.n <- length(y1)  # number of individuals
+my.p <- ncol(X.mat) - 1  # total number of predictors
+my.r <- ncol(resid.mat)  # total number of responses
+ 
+E.mat.full <- (my.n-1)*var(resid.mat)
+
+## Reduced model (without x2)
+
+Beta.hat.redu <- cbind(coef(lm(y1 ~ x1) ), coef(lm(y2 ~ x1) ) )
+
+##
+## Note:  If we were testing the null hypothesis that the *entire set* of predictors 
+## was useless in the model, our reduced model would contain ONLY an intercept term.
+## We could fit such a reduced model using:  
+##    Beta.hat.redu <- cbind(coef(lm(y1 ~ 1) ), coef(lm(y2 ~ 1) ) )
+##
+
+X.mat.redu <- cbind(rep(1,times=nrow(comput)),x1) 
+my.p.redu <- ncol(X.mat.redu) - 1  # number of predictors in the reduced model
+
+Y.hat.redu <- X.mat.redu %*% Beta.hat.redu
+
+
+resid.mat.redu <- cbind (y1,y2) - Y.hat.redu
+
+E.mat.redu <- (my.n-1)*var(resid.mat.redu)
+
+my.test.stat <-  -(my.n - my.p - 1 - 0.5*(my.r - my.p + my.p.redu + 1)) * log( det(E.mat.full)/det(E.mat.redu) )
+my.test.stat
+p.value <- pchisq(my.test.stat, df = my.r*(my.p - my.p.redu), lower.tail=F )
+p.value
+
+##############################
+
+#### Prediction ellipse for (y1, y2)
+
+# Suppose we have a new site with 130 thousand orders and 7.5 thousand add-delete items.
+# Let's get a 95% prediction ellipse for that site's (CPU time, disk input/output capacity).
+
+# The predictor values of interest (including a "1" for the intercept term):
+
+x0 <- c(1, 130, 7.5)
+pt.est <- t(as.matrix(x0,nc=1)) %*% Beta.hat
+pt.est
+
+# A point prediction for this site is:
+# predicted CPU time = 151.8 hours, predicted disk input/output capacity = 349.6.
+
+middle.mat <- solve((1/(my.n - my.p - 1))*E.mat.full)
+
+
+my.y1 <- runif(n=100000, min=min(y1), max=max(y1) )
+my.y2 <- runif(n=100000, min=min(y2), max=max(y2) )
+my.ys <- cbind(my.y1,my.y2)
+
+my.pts<-rep(0,times=length(my.y1))
+
+for (i in 1:(length(my.pts)) ) {
+my.pts[i] <- (my.ys[i,] - pt.est) %*% middle.mat %*% t((my.ys[i,] - pt.est))
+}
+
+multiple.pred <- as.numeric( (1 + t(as.matrix(x0,nc=1)) %*% solve(t(X.mat) %*% X.mat) %*% 
+                  as.matrix(x0,nc=1) ) * (my.r*(my.n-my.p-1)/(my.n-my.p-my.r) ) )
+
+my.y1.inside.p <- my.y1[my.pts <= multiple.pred*qf(0.95, my.r, my.n-my.p-my.r)]
+my.y2.inside.p <- my.y2[my.pts <= multiple.pred*qf(0.95, my.r, my.n-my.p-my.r)]
+plot(my.y1.inside.p, my.y2.inside.p, xlab="CPU Time (hours)", ylab="Disk Input/output Capacity", type='n')
+conv.hull.p <- chull(my.y1.inside.p, my.y2.inside.p)
+polygon(my.y1.inside.p[conv.hull.p], my.y2.inside.p[conv.hull.p])
+points(pt.est)
+
+#### Confidence ellipse for (y1, y2)
+
+# Let's consider all sites with 130 thousand orders and 7.5 thousand add-delete items.
+# Let's get a 95% confidence ellipse for (mean CPU time, mean disk input/output capacity) for those such sites.
+
+# The predictor values of interest (including a "1" for the intercept term):
+
+x0 <- c(1, 130, 7.5)
+pt.est <- t(as.matrix(x0,nc=1)) %*% Beta.hat
+pt.est
+
+# A point estimate for this mean vector is:
+# mean CPU time: 151.8 hours, mean disk input/output capacity: 349.6.
+
+middle.mat <- solve((1/(my.n - my.p - 1))*E.mat.full)
+
+
+my.y1 <- runif(n=100000, min=min(y1), max=max(y1) )
+my.y2 <- runif(n=100000, min=min(y2), max=max(y2) )
+my.ys <- cbind(my.y1,my.y2)
+
+my.pts<-rep(0,times=length(my.y1))
+
+for (i in 1:(length(my.pts)) ) {
+my.pts[i] <- (my.ys[i,] - pt.est) %*% middle.mat %*% t((my.ys[i,] - pt.est))
+}
+
+multiple.conf <- as.numeric( (t(as.matrix(x0,nc=1)) %*% solve(t(X.mat) %*% X.mat) %*% 
+                  as.matrix(x0,nc=1) ) * (my.r*(my.n-my.p-1)/(my.n-my.p-my.r) ) )
+
+my.y1.inside.c <- my.y1[my.pts <= multiple.conf*qf(0.95, my.r, my.n-my.p-my.r)]
+my.y2.inside.c <- my.y2[my.pts <= multiple.conf*qf(0.95, my.r, my.n-my.p-my.r)]
+plot(my.y1.inside.c, my.y2.inside.c, xlab="CPU Time (hours)", ylab="Disk Input/output Capacity", type='n')
+conv.hull.c <- chull(my.y1.inside.c, my.y2.inside.c)
+polygon(my.y1.inside.c[conv.hull.c], my.y2.inside.c[conv.hull.c])
+points(pt.est)
+
+# Prediction and Confidence ellipses on same plot:
+
+plot(my.y1.inside.p, my.y2.inside.p, xlab="CPU Time (hours)", ylab="Disk Input/output Capacity", type='n')
+polygon(my.y1.inside.c[conv.hull.c], my.y2.inside.c[conv.hull.c])
+polygon(my.y1.inside.p[conv.hull.p], my.y2.inside.p[conv.hull.p], lty='dashed')
+points(pt.est)
+
+
+### Checking model assumptions:
+
+qqnorm(resid.mat[,1], main = "Normal Q-Q plot, y1")
+windows()
+plot(Y.hat[,1],resid.mat[,1], main = "Residual plot vs. fitted values, y1"); abline(h=0)
+windows()
+qqnorm(resid.mat[,2], main = "Normal Q-Q plot, y2")
+windows()
+plot(Y.hat[,2],resid.mat[,2], main = "Residual plot vs. fitted values, y2"); abline(h=0)
+
+
+
+#####################################################################################
+
+# Example 2: The sales performance data:
+
+salesdata <- read.table("http://www.stat.sc.edu/~hitchcock/salesmat.txt", header=T)
+
+attach(salesdata)
+
+# Recall the variables:
+# X1 = Sales growth 
+# X2 = Sales profitability 
+# X3 = New account sales 
+# X4 = Creativity Test 
+# X5 = Mechanical Reasoning Test 
+# X6 = Abstract Reasoning Test 
+# X7 = Mathematics Test
+# X8 = Historical Facts Test 
+# X9 = Sports Trivia Test 
+# X10 = Music Trivia Test
+
+# We will try to predict the "performance" variables (x1, x2, x3) using the
+# "test score" variables (x4, x5, ..., x10).
+
+# Fitting the multivariate linear regression model:
+
+sales.mod.1 <- lm(x1 ~ x4 + x5 + x6 + x7 + x8 + x9 + x10)
+sales.mod.2 <- lm(x2 ~ x4 + x5 + x6 + x7 + x8 + x9 + x10)
+sales.mod.3 <- lm(x3 ~ x4 + x5 + x6 + x7 + x8 + x9 + x10)
+
+# A quick summary:
+sales.mod <- lm(cbind(x1,x2,x3) ~ x4 + x5 + x6 + x7 + x8 + x9 + x10)
+summary(sales.mod)
+
+Beta.hat <- cbind(coef(sales.mod.1), coef(sales.mod.2), coef(sales.mod.3) )
+Beta.hat
+
+X.mat <- cbind(rep(1,times=nrow(salesdata)), x4, x5, x6, x7, x8, x9, x10) 
+
+Y.hat <- cbind(fitted(sales.mod.1), fitted(sales.mod.2), fitted(sales.mod.3))
+
+resid.mat <- cbind(resid(sales.mod.1), resid(sales.mod.2), resid(sales.mod.3))
+
+#### Testing whether the set (x8, x9, x10) is useless, 
+#### given the presence of x4, x5, x6, x7 as predictors in the model:
+
+## Full model:
+
+my.n <- length(x1)  # number of individuals
+my.p <- ncol(X.mat) - 1  # total number of predictors
+my.r <- ncol(resid.mat)  # total number of responses
+ 
+E.mat.full <- (my.n-1)*var(resid.mat)
+
+## Reduced model (without x8, x9, x10)
+
+Beta.hat.redu <- cbind(coef(lm(x1 ~ x4 + x5 + x6 + x7) ), 
+                       coef(lm(x2 ~ x4 + x5 + x6 + x7) ), coef(lm(x3 ~ x4 + x5 + x6 + x7)) )
+
+
+X.mat.redu <- cbind(rep(1,times=nrow(salesdata)), x4, x5, x6, x7) 
+my.p.redu <- ncol(X.mat.redu) - 1  # number of predictors in the reduced model
+
+Y.hat.redu <- X.mat.redu %*% Beta.hat.redu
+
+
+resid.mat.redu <- cbind (x1,x2,x3) - Y.hat.redu
+
+E.mat.redu <- (my.n-1)*var(resid.mat.redu)
+
+my.test.stat <-  -(my.n - my.p - 1 - 0.5*(my.r - my.p + my.p.redu + 1)) * log( det(E.mat.full)/det(E.mat.redu) )
+my.test.stat
+p.value <- pchisq(my.test.stat, df = my.r*(my.p - my.p.redu), lower.tail=F )
+p.value
+
+### Checking model assumptions:
+
+qqnorm(resid.mat[,1], main = "Normal Q-Q plot, Sales growth")
+windows()
+plot(Y.hat[,1],resid.mat[,1], main = "Residual plot vs. fitted values, Sales growth"); abline(h=0)
+windows()
+qqnorm(resid.mat[,2], main = "Normal Q-Q plot, Sales profitability")
+windows()
+plot(Y.hat[,2],resid.mat[,2], main = "Residual plot vs. fitted values, Sales profitability"); abline(h=0)
+windows()
+qqnorm(resid.mat[,3], main = "Normal Q-Q plot, New account sales")
+windows()
+plot(Y.hat[,3],resid.mat[,3], main = "Residual plot vs. fitted values, New account sales"); abline(h=0)
